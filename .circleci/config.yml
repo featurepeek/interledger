@@ -1,0 +1,70 @@
+# Javascript Node CircleCI 2.0 configuration file
+#
+# Check https://circleci.com/docs/2.0/language-javascript/ for more details
+#
+version: 2
+jobs:
+  build:
+    working_directory: ~/interledger
+    docker:
+      # specify the version you desire here
+      - image: circleci/ruby:2.6-node
+
+    steps:
+      - checkout
+      - run:
+          name: "Update Node.js and npm"
+          command: |
+            curl -sSL "https://nodejs.org/dist/v8.15.0/node-v8.15.0-linux-x64.tar.xz" | sudo tar --strip-components=2 -xJ -C /usr/local/bin/ node-v8.15.0-linux-x64/bin/node
+            curl https://www.npmjs.com/install.sh | sudo bash
+      - run:
+          name: Check current version of node
+          command: node -v
+
+      #Restoring yarn cache
+      - restore_cache:
+          name: Restoring yarn cache
+          keys:
+            # when lock file changes, use increasingly general patterns to restore cache
+            - yarn-v1-{{ .Branch }}-{{ checksum "yarn.lock" }}
+            - yarn-v1-{{ .Branch }}-
+            - yarn-v1-
+
+      - run: yarn
+
+      #Saving yarn cache
+      - save_cache:
+          name: Saving yarn cache
+          paths:
+            -  node_modules  # location depends on yarn version
+          key: yarn-v1-{{ .Branch }}-{{ checksum "yarn.lock" }}
+
+      - run: gem install bundler:2.0.1
+
+      # Restoring bundler cache
+      - restore_cache:
+          name: Restoring bundler cache
+          key: bundler-v2-{{ checksum "Gemfile.lock" }}
+
+      #Bundler Dependencies
+      - run: 
+          name: Jekyll deps
+          command: bundle install --jobs=4 --retry=3 --path vendor/bundle
+      
+      # Saving bundler cache
+      - save_cache:
+          name: Saving bundler cache
+          key: bundler-v2-{{ checksum "Gemfile.lock" }}
+          paths: 
+            - ./vendor/bundle 
+
+      - run:
+          name: Jekyll build
+          command: bundle exec jekyll build
+
+      - store_artifacts:
+          path: ./_site
+
+      - run:
+          name: Pinging FeaturePeek
+          command: yarn featurepeek
